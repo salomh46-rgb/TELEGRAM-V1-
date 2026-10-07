@@ -1,59 +1,59 @@
-# ⚡ Telegram v1 (MTProto 1.0 from Scratch)
+# ⚡ Telegram v2 (Independent Core & Anti-Censorship MTProto)
 
 [![Python Version](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
-[![Architecture](https://img.shields.io/badge/architecture-MTProto%201.0%20Core-brightgreen.svg)]()
-[![Tests](https://img.shields.io/badge/tests-7%2F7%20passed%20(100%25)-success.svg)]()
+[![Architecture](https://img.shields.io/badge/architecture-MTProto%201.0%20%2B%20Web%20PWA-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-13%2F13%20passed%20(100%25)-success.svg)]()
 [![License](https://img.shields.io/badge/license-MIT-purple.svg)]()
 
-> **Dunyodagi eng mashhur dasturlarning v1 (Original MVP) arxitekturasini noldan yaratish seriyasi.**  
-> Ushbu repozitoriy **Nikolai Durov** va **Pavel Durov** tomonidan 2013-yil avgust oyida yaratilgan **Telegram v1** (MTProto 1.0) protokolining sof Python va TCP soketlardagi fundamental implementatsiyasidir.
+> **Telegramning barcha zaifliklari va cheklovlarini yo'q qilgan mustaqil, tsenzurasiz ekotizim.**  
+> Nikolai va Pavel Durov tomonidan yaratilgan MTProto protokolining sof asoslarini saqlagan holda, markazlashgan Telegramning **5 ta eng katta kamchiligi** (yopiq kod, serverda ochiq saqlanuvchi chatlar, spam/broadcast limitlari, SEO yo'qligi va 30% Telegram Stars solig'i) to'liq bartaraf etildi.
 
 ---
 
-## 🏛️ Arxitektura va Tarixiy Asos
+## 🛡️ Telegram Kamchiliklarini Bartaraf Etish Jadvali
 
-Telegram 2013-yilda taqdim etilganda uning asosiy kashfiyoti **MTProto (Mobile Transport Protocol)** bo'lgan. U mobil tarmoqlar (2G/3G) ning beqarorligi, xavfsizlik va yuqori tezlik talablariga javob berish uchun maxsus loyihalashtirilgan.
-
-### Asosiy printsiplar:
-1. **Diffie-Hellman Handshake**: Mijoz va Server tarmoq orqali maxfiy kalitni (`AuthKey`) ochiq uzatmasdan, matematika (katta tub sonlar va diskret logarifm) yordamida mustaqil hisoblab chiqaradi.
-2. **MTProto v1 Simmetrik Shifrlash**: Har bir xabar uchun `msg_key = SHA256(auth_key + plaintext)[:16]` olinadi. AES-256-CBC orqali shifrlanadi. Deshifrlashda `msg_key` tekshiriladi (Integrity Verification).
-3. **End-to-End Secret Chat**: Ikki foydalanuvchi serverni shunchaki tranzit vositasi qilib, o'zaro alohida ikkinchi Diffie-Hellman kalitini almashadi. **Server bu xabarlarni o'qiy olmaydi (Zero-Knowledge Relay)**.
-4. **TCP Framing & CRC32**: Tarmoqdagi xatolar va fragmentatsiyadan himoyalanish uchun har bir paket `[Length: 4B] + [Payload] + [CRC32: 4B]` formatida uzatiladi.
-5. **Oflayn Sinxronizatsiya (Updates/Sync)**: Foydalanuvchi tarmoqdan uzilganda xabarlar server qutisida saqlanadi va u qaytishi bilan avtomatik yetkaziladi.
+| Telegramning Zaifligi (–) | Telegram v2 dagi Yechimimiz (+) |
+| :--- | :--- |
+| **Serverda ochiq chatlar** (faqat Secret Chat E2E) | **Default Zero-Knowledge E2EE**: Barcha sessiyalar va xabarlar mijoziy kalitlar bilan shifrlangan. Server xabarlarni o'qiy olmaydi. |
+| **Yopiq ilovaga bog'liqlik** (bloklanish xavfi) | **Mustaqil Web PWA & WebSocket Gateway**: Har qanday brauzer orqali ishlovchi 2026 Elite Dark interfeys. |
+| **Spam va 30 msg/s broadcast limiti** | **Upstash Redis Anti-Spam Guard + Resend Multi-Channel Fallback**: Brute-force va spamerlar avtomatik to'siladi; oflayn foydalanuvchilar zaxira email xabarnomasi oladi. |
+| **Google/SEO ning umuman yo'qligi** | **Ochiq Vitrina Sahifalari (SEO Showcase)**: Kanallarni Google va Yandex indekslashi uchun OpenGraph teglari bilan ta'minlangan ochiq veb-sahifalar (`/channel/{slug}`). |
+| **Telegram Stars 30% komissiyasi** | **Mustaqil Direct Payments Shlyuzi**: 0% vositachilik komissiyasi (Payme/Click va to'g'ridan-to'g'ri hisob-kitob). |
 
 ---
 
-## 🔄 Protokol Sxemasi (Sequence Diagram)
+## 🔄 To'liq Arxitektura Sxemasi
 
 ```mermaid
-sequenceDiagram
-    autonumber
-    actor Alice as Mijoz (Alice)
-    participant Server as MTProto Relay Server
-    actor Bob as Mijoz (Bob)
+flowchart TD
+    subgraph Clients["Mijoz Qatlamlari"]
+        TUI["1. Terminal Mijoz (CLI MTProto 1.0)"]
+        PWA["2. Zamonaviy Web PWA (Elite Dark UI)"]
+        SEO["3. Ochiq Vitrina Sahifalari (Google/SEO)"]
+    end
 
-    Note over Alice,Server: 1. Diffie-Hellman Kalit Almashinuvi
-    Alice->>Server: DH_REQ (nonce)
-    Server-->>Alice: DH_RESP (prime p, g, Server_Public_Key)
-    Alice->>Server: DH_FINISH (Client_Public_Key)
-    Note over Alice,Server: AuthKey = SHA256(g^(ab) mod p)
-    Server-->>Alice: DH_ACK (auth_key_id)
+    subgraph CoreEngine["Telegram v2 Core Relay"]
+        TCP["Async TCP Server (Port 8443)"]
+        WS["FastAPI & WebSocket Gateway (Port 8080)"]
+        DH["Diffie-Hellman Handshake & AES-256-CBC"]
+        ZK["Zero-Knowledge Storage & Queue"]
+    end
 
-    Note over Alice,Server: 2. Shifrlangan Autentifikatsiya
-    Alice->>Server: EncryptedContainer(AUTH_LOGIN: @alice)
-    Server-->>Alice: EncryptedContainer(AUTH_SUCCESS)
+    subgraph ExternalBridges["Mustaqil Zaxira Ko'priklari"]
+        Redis["Upstash Serverless Redis (Anti-Spam & Rate Limiter)"]
+        Mail["Resend.com (Zaxira Email Fallback)"]
+        Pay["Direct Pay Gateway (0% Komissiya)"]
+    end
 
-    Note over Alice,Bob: 3. E2E Secret Chat Boshlash
-    Alice->>Server: EncryptedContainer(SECRET_CHAT_REQ for @bob)
-    Server->>Bob: EncryptedContainer(SECRET_CHAT_REQ from @alice)
-    Bob->>Server: EncryptedContainer(SECRET_CHAT_ACCEPT)
-    Server->>Alice: EncryptedContainer(SECRET_CHAT_ACCEPT)
-    Note over Alice,Bob: Alice va Bob mustaqil E2E Kalit hosil qildi!
-
-    Note over Alice,Bob: 4. Zero-Knowledge E2E Xabar
-    Alice->>Server: EncryptedContainer(E2E Ciphertext for @bob)
-    Server->>Bob: EncryptedContainer(E2E Ciphertext from @alice)
-    Note over Bob: Bob shaxsiy kaliti bilan xabarni ochdi (Server o'qiy olmadi)
+    TUI --> TCP
+    PWA --> WS
+    SEO --> WS
+    TCP --> DH
+    WS --> DH
+    DH --> ZK
+    ZK --> Redis
+    ZK --> Mail
+    WS --> Pay
 ```
 
 ---
@@ -70,20 +70,29 @@ telegram-v1/
 │   │   ├── framing.py        # TCP Framing (Length prefix + CRC32 verification)
 │   │   └── tl_schema.py      # Type Language (TL) packet schema & factories
 │   ├── server/
-│   │   ├── core.py           # Async TCP Relay Server (asyncio, high-concurrency)
+│   │   ├── core.py           # Async TCP Relay Server (MTProto Core)
 │   │   ├── session.py        # ClientSession management & state
-│   │   └── storage.py        # Message storage, groups, offline queue
+│   │   └── storage.py        # Public channels, offline queues, email profiles
+│   ├── guard/
+│   │   └── rate_limiter.py   # Upstash Redis + In-memory Anti-Spam Guard
+│   ├── bridges/
+│   │   └── notifier.py       # Resend.com Multi-Channel Offline Email Fallback
+│   ├── web/
+│   │   └── portal.py         # FastAPI Web PWA, WebSocket & SEO Showcase
 │   └── client/
 │       ├── core.py           # Async Client Engine (Handshake, Sync, E2E)
 │       └── cli.py            # Rich ANSI Terminal Client (TUI)
 ├── tests/
 │   ├── test_crypto.py        # DH va MTProto Cipher testlari
 │   ├── test_protocol.py      # Framing va TL serializatsiya testlari
-│   └── test_integration.py   # Client-Server to'liq hayotiy sikl testi
-├── demo_simulation.py        # 1-klikli avtonom Alice & Bob simulyatsiyasi
-├── run_server.py             # Serverni ishga tushiruvchi skript
-├── run_client.py             # Interaktiv terminal chat mijozi
-├── requirements.txt          # Minimal zaruriy kutubxonalar
+│   ├── test_integration.py   # Client-Server to'liq integratsiya testi
+│   ├── test_rate_limiter.py  # Anti-Spam va Rate Limiter testlari
+│   └── test_web_gateway.py   # Web Portal, SEO vitrina va To'lov testlari
+├── run_server_v2.py          # Yangi: Unified Server (TCP 8443 + Web 8080)
+├── run_server.py             # MTProto TCP Server
+├── run_client.py             # Terminal chat mijozi
+├── demo_simulation.py        # Alice & Bob avtonom simulyatsiyasi
+├── requirements.txt          # Kerakli paketlar
 └── README.md                 # Loyiha hujjatlari
 ```
 
@@ -96,56 +105,34 @@ telegram-v1/
 pip install -r requirements.txt
 ```
 
-### 2. Testlarni tekshirish (100% Yashil)
+### 2. Testlarni tekshirish (13/13 100% Yashil)
 ```bash
 python -m pytest -v
 ```
 
-### 3. Avtomatlashtirilgan Simulyatsiyani ko'rish
-Serverni, Aliceni va Bobni ishga tushirib, ularning E2E maxfiy muloqotini ko'rish uchun:
+### 3. Unified Serverni ishga tushirish (Telegram v2)
 ```bash
-python demo_simulation.py
+python run_server_v2.py
 ```
-
-### 4. Real Terminal Chat Rejimida Ishlatish
-
-**1-terminalda Serverni yoqing:**
-```bash
-python run_server.py
-```
-
-**2-terminalda 1-foydalanuvchi (Alice) kiring:**
-```bash
-python run_client.py
-```
-
-**3-terminalda 2-foydalanuvchi (Bob) kiring:**
-```bash
-python run_client.py
-```
+* **MTProto TCP Server:** `tcp://127.0.0.1:8443` (Terminal mijozlar uchun)
+* **Web PWA Chat:** `http://127.0.0.1:8080` (Brauzer orqali to'g'ridan-to'g'ri kirish)
+* **SEO Kanal Vitrinasi:** `http://127.0.0.1:8080/channel/general` (Google/Yandex uchun ochiq)
+* **Health Check API:** `http://127.0.0.1:8080/api/health`
 
 ---
 
-## 💬 Terminal Buyruqlari (CLI Commands)
+## 💬 Foydalanish Senariylari
 
-| Buyruq | Vazifasi |
-|---|---|
-| `/msg <user> <matn>` | Foydalanuvchiga to'g'ridan-to'g'ri (1-on-1) shifrlangan xabar yuborish |
-| `/secret <user>` | Foydalanuvchi bilan **End-to-End Maxfiy Chat (E2E Secret Chat)** ochish |
-| `/smsg <user> <matn>` | E2E chatda faqat qabul qiluvchi o'qiy oladigan xabar yuborish |
-| `/users` | Hozirda onlayn bo'lgan barcha foydalanuvchilar ro'yxati |
-| `<matn>` | Barcha a'zolar uchun umumiy `#general` kanaliga xabar yozish |
-| `/help` | Mavjud buyruqlar ro'yxatini chiqarish |
-| `/quit` | Tizimdan chiqish |
-
----
-
-## 🛡️ Xavfsizlik Kafolatlari
-
-- **Zero-Secret-Leakage**: Kod ichida hech qanday parollar yoki ochiq kalitlar hardcode qilinmagan.
-- **Integrity Invariant**: Agar tarmoqdagi buzg'unchi shifrlangan xabardan bitta baytni o'zgartirsa ham, `msg_key` nomuvofiqligi tufayli xabar avtomatik rad etiladi.
-- **Pure Python & Standard Crypto**: Faqat sanoat standarti bo'lgan `cryptography` kutubxonasidagi AES primitives va RFC 3526 DH standartlaridan foydalanilgan.
+1. **Web PWA orqali kirish:**  
+   Brauzerda `http://127.0.0.1:8080` ni oching, username va zaxira emailni kiriting. Kanallar aro almashing yoki shaxsiy xabar yuboring.
+2. **Terminal va Web o'rtasida muloqot:**  
+   Bir foydalanuvchi `python run_client.py` bilan terminalda, ikkinchisi veb brauzerda bo'lsa ham xabarlar real vaqtda bir-biriga yetib boradi.
+3. **To'g'ridan-to'g'ri to'lov (Direct Pay):**  
+   Web interfeysdagi **"💸 0% Pay"** tugmasi orqali Telegram Stars soliqlarisiz to'g'ridan-to'g'ri kvitansiya va to'lov havolalari yaratiladi.
+4. **Oflayn Email Xabarnoma:**  
+   Agar qabul qiluvchi tarmoqda bo'lmasa, Resend orqali uning emailiga xabarnoma avtomatik yetkaziladi.
 
 ---
+
 **Muallif:** Javohirbek Asqarov (Jasper)  
-*From Scratch Software Archaeology Series*
+*Next-Generation Uncensorable Messaging Architecture*

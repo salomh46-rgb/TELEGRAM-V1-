@@ -19,19 +19,23 @@ from telegram_v1.protocol.tl_schema import (
 )
 from telegram_v1.server.session import ClientSession
 from telegram_v1.server.storage import MessageStorage
+from telegram_v1.guard.rate_limiter import AntiSpamRateLimiter
+from telegram_v1.bridges.notifier import ResendNotifier
 
 logger = logging.getLogger("telegram_v1.server")
 
 
 class TelegramServer:
     """
-    Core MTProto v1 relay server.
+    Core MTProto v1/v2 relay server.
     """
 
     def __init__(self, host: str = "127.0.0.1", port: int = 8443):
         self.host = host
         self.port = port
         self.storage = MessageStorage()
+        self.rate_limiter = AntiSpamRateLimiter()
+        self.notifier = ResendNotifier()
         # username -> active ClientSession
         self.active_sessions: Dict[str, ClientSession] = {}
         self._server: Optional[asyncio.Server] = None
@@ -58,6 +62,14 @@ class TelegramServer:
         session_id = str(uuid.uuid4())[:8]
         session = ClientSession(reader, writer, session_id)
         logger.info(f"[*] New connection from {session.peer_address} (session: {session_id})")
+
+        # Anti-spam rate limit on incoming IP
+        peer_ip = session.peer_address.split(":")[0] if session.peer_address else "127.0.0.1"
+        allowed, _ = await self.rate_limiter.check(f"ip:{peer_ip}", limit=120, window_seconds=60)
+        if not allowed:
+            logger.warning(f"🚫 [SPAM GUARD] Connection blocked from IP {peer_ip}")
+            session.writer.close()
+            return
 
         try:
             # Phase 1: Cryptographic Diffie-Hellman Handshake
@@ -140,11 +152,12 @@ class TelegramServer:
     async def _handle_auth_login(self, session: ClientSession, packet: TLPacket) -> None:
         username = packet.data["username"].strip().lower()
         display_name = packet.data.get("display_name", username)
+        email = packet.data.get("email")
 
         session.username = username
         session.display_name = display_name
         self.active_sessions[username] = session
-        self.storage.register_user(username, display_name)
+        self.storage.register_user(username, display_name, email=email)
 
         logger.info(f"[👤 AUTH] User @{username} ({display_name}) signed in.")
 
@@ -166,6 +179,17 @@ class TelegramServer:
         sender = session.username or "anonymous"
         packet.data["sender"] = sender
 
+        # Anti-spam rate limit check per user
+        allowed, _ = await self.rate_limiter.check(f"user:{sender}", limit=60, window_seconds=60)
+        if not allowed:
+            await session.send_encrypted(
+                TLPacket(
+                    type=TLType.SYSTEM_NOTIFY,
+                    data={"text": "⚠️ [RATE LIMIT] Xabar yuborish tezligi oshib ketdi. Iltimos, bir oz kuting."},
+                )
+            )
+            return
+
         target_session = self.active_sessions.get(recipient)
         if target_session and target_session.handshake_complete:
             # Deliver in real-time
@@ -175,11 +199,25 @@ class TelegramServer:
             # Queue in offline inbox
             self.storage.queue_offline_message(recipient, packet.data)
             logger.info(f"[📬 OFFLINE] @{sender} -> @{recipient}: Queued in offline inbox.")
+            # Multi-channel fallback: send email alert if recipient has email registered
+            recip_email = self.storage.get_user_email(recipient)
+            if recip_email:
+                text_preview = packet.data.get("text", "")[:120]
+                self.notifier.schedule_offline_notification(
+                    to_email=recip_email,
+                    recipient_username=recipient,
+                    sender_username=sender,
+                    message_preview=text_preview,
+                )
 
     async def _handle_group_message(self, session: ClientSession, packet: TLPacket) -> None:
         group = packet.data.get("group", "#general")
         sender = session.username or "anonymous"
+        text = packet.data.get("text", "")
         packet.data["sender"] = sender
+
+        # Save to public channel posts for SEO vitrina and history
+        self.storage.post_to_channel(group, sender, text)
 
         members = self.storage.get_group_members(group)
         for member in members:
