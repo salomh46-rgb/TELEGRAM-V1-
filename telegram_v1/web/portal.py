@@ -163,6 +163,30 @@ def create_web_portal(server: TelegramServer) -> FastAPI:
             "timestamp": time.time(),
         }
 
+    @app.get("/manifest.json")
+    async def get_manifest():
+        return {
+            "name": "Telegram v2 Independent",
+            "short_name": "Telegram v2",
+            "start_url": "/",
+            "display": "standalone",
+            "background_color": "#07090e",
+            "theme_color": "#38bdf8",
+            "icons": [
+                {
+                    "src": "https://img.icons8.com/color/192/telegram-app.png",
+                    "sizes": "192x192",
+                    "type": "image/png",
+                }
+            ],
+        }
+
+    @app.get("/sw.js")
+    async def get_service_worker():
+        from fastapi.responses import Response
+        sw_code = "const CACHE='tg-v2-cache-v1';self.addEventListener('install',e=>self.skipWaiting());self.addEventListener('fetch',e=>{e.respondWith(fetch(e.request).catch(()=>caches.match(e.request)));});"
+        return Response(content=sw_code, media_type="application/javascript")
+
     @app.get("/api/public/channels")
     async def get_public_channels():
         return {"channels": server.storage.get_public_channels()}

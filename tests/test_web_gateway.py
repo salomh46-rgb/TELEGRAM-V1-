@@ -55,3 +55,14 @@ def test_pwa_client_html_served(client):
     assert response.status_code == 200
     assert "Telegram v2" in response.text
     assert "messagesContainer" in response.text
+
+
+def test_pwa_manifest_and_sw(client):
+    manifest_resp = client.get("/manifest.json")
+    assert manifest_resp.status_code == 200
+    assert manifest_resp.json()["name"] == "Telegram v2 Independent"
+
+    sw_resp = client.get("/sw.js")
+    assert sw_resp.status_code == 200
+    assert "CACHE" in sw_resp.text
+
